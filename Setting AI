@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Navi Phone Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #0b0d0e; color: #e3e3e3; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+        .setting-card { background: #1e1f20; border-radius: 20px; border: 1px solid #333; padding: 15px; margin-bottom: 10px; }
+        #chat-flow { height: calc(100vh - 180px); overflow-y: auto; padding-bottom: 50px; }
+        .fixed-input { position: fixed; bottom: 0; left: 0; right: 0; background: #0b0d0e; padding: 20px; border-top: 1px solid #222; }
+        .action-btn { background: #4285f4; color: white; padding: 8px 20px; rounded-full; font-weight: bold; font-size: 14px; }
+    </style>
+</head>
+<body class="flex flex-col h-screen">
+
+    <header class="p-4 flex justify-between items-center border-b border-gray-800 bg-[#0b0d0e]">
+        <div class="flex items-center gap-2">
+            <span class="w-3 h-3 bg-green-500 rounded-full animate-pulse"></span>
+            <h1 class="font-bold text-gray-300">NAVI PHONE ASSISTANT</h1>
+        </div>
+        <button onclick="openSettings()" class="text-gray-500">⚙️ Config</button>
+    </header>
+
+    <div id="chat-flow" class="flex-1 px-4 md:px-20 py-6">
+        <div id="welcome-msg" class="text-center mt-10">
+            <h2 class="text-3xl font-bold text-blue-400 mb-2">Aapka Phone, Aapka Control</h2>
+            <p class="text-gray-500">Boliye: "Volume badhao", "Bluetooth kholo" ya "Ringtone badlo"</p>
+        </div>
+    </div>
+
+    <div class="fixed-input">
+        <div class="max-w-3xl mx-auto flex gap-3 bg-[#1e1f20] p-3 rounded-3xl border border-gray-700">
+            <input id="phoneInput" type="text" class="flex-1 bg-transparent border-none outline-none px-4 text-white" placeholder="Phone ki koi setting badlein...">
+            <button onclick="handlePhoneAction()" class="bg-blue-600 px-6 py-2 rounded-2xl font-bold">Action</button>
+        </div>
+        <p class="text-[10px] text-center text-gray-600 mt-2">Arcee Trinity Large Model Active</p>
+    </div>
+
+    <div id="modal" class="hidden fixed inset-0 bg-black/90 flex items-center justify-center p-6 z-[100]">
+        <div class="bg-[#1e1f20] p-8 rounded-3xl w-full max-w-md border border-gray-700">
+            <h3 class="text-xl font-bold mb-4">API & Model Setup</h3>
+            <input id="apiKey" type="password" class="w-full bg-[#0b0d0e] border border-gray-700 p-4 rounded-xl mb-4 text-white" placeholder="OpenRouter API Key">
+            <input id="modelId" type="text" class="w-full bg-[#0b0d0e] border border-gray-700 p-4 rounded-xl mb-6 text-white" value="arcee-ai/trinity-large-preview:free">
+            <button onclick="saveConfig()" class="w-full bg-blue-600 py-4 rounded-xl font-bold">Save Assistant</button>
+        </div>
+    </div>
+
+    <script>
+        function openSettings() { document.getElementById('modal').classList.toggle('hidden'); }
+        function saveConfig() {
+            localStorage.setItem('phone_key', document.getElementById('apiKey').value);
+            localStorage.setItem('phone_model', document.getElementById('modelId').value);
+            openSettings();
+        }
+
+        async function handlePhoneAction() {
+            const input = document.getElementById('phoneInput').value.trim();
+            if(!input) return;
+            
+            document.getElementById('welcome-msg').style.display = 'none';
+            const chat = document.getElementById('chat-flow');
+            chat.innerHTML += `<div class="flex justify-end mb-4"><div class="bg-blue-900/40 border border-blue-500/30 p-4 rounded-2xl max-w-[80%]">${input}</div></div>`;
+            document.getElementById('phoneInput').value = "";
+
+            // --- PHONE SETTINGS BRAIN ---
+            let responseMsg = "";
+            let actionHtml = "";
+
+            if(input.toLowerCase().includes("volume")) {
+                responseMsg = "Theek hai, main volume settings check kar raha hoon...";
+                actionHtml = `<div class="setting-card">🔊 <b>Volume Control:</b> <input type="range" class="w-full mt-2"> <button class="action-btn mt-3">Set Volume</button></div>`;
+            } 
+            else if(input.toLowerCase().includes("bluetooth")) {
+                responseMsg = "Bluetooth menu kholne ke liye tayyar...";
+                actionHtml = `<div class="setting-card">🔵 <b>Bluetooth Status:</b> Off <br><button class="action-btn mt-3">Turn ON</button></div>`;
+            }
+            else if(input.toLowerCase().includes("brightness")) {
+                responseMsg = "Main phone ki brightness adjust karne mein madad kar sakta hoon.";
+                actionHtml = `<div class="setting-card">☀️ <b>Brightness:</b> <input type="range" class="w-full mt-2"></div>`;
+            }
+            else {
+                // Agar phone setting nahi hai, toh API se pucho
+                responseMsg = await callTrinityAPI(input);
+            }
+
+            chat.innerHTML += `<div class="flex justify-start mb-4 flex-col">
+                <div class="p-2 text-gray-400 italic text-sm">Navi: ${responseMsg}</div>
+                ${actionHtml}
+            </div>`;
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        async function callTrinityAPI(text) {
+            const key = localStorage.getItem('phone_key');
+            if(!key) return "Pehle settings mein API Key daalein.";
+            
+            try {
+                const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                    method: "POST",
+                    headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        model: localStorage.getItem('phone_model') || "arcee-ai/trinity-large-preview:free",
+                        messages: [{role: "user", content: "You are a phone assistant. Reply in Hindi (Latin): " + text}]
+                    })
+                });
+                const data = await res.json();
+                return data.choices[0].message.content;
+            } catch(e) { return "Maaf kijiye, main connect nahi ho paa raha hoon."; }
+        }
+    </script>
+</body>
+</html>
